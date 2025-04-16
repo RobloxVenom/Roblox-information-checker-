@@ -1,136 +1,95 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import requests
+import json
+import os
 from datetime import datetime
-import socket
-import urllib3
 
-# Disable SSL warnings (not secure for production!)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-class RobloxVenomApp:
+class RobloxVenomOffline:
     def __init__(self, root):
         self.root = root
-        self.root.title("RobloxVenom - Player Info v2.0")
-        self.root.geometry("450x350")
+        self.root.title("RobloxVenom OFFLINE v3.0")
+        self.root.geometry("500x400")
         self.root.resizable(False, False)
         
-        # UI Styling
+        # إنشاء ملف تخزين محلي إذا لم يكن موجوداً
+        self.data_file = "players_data.json"
+        if not os.path.exists(self.data_file):
+            with open(self.data_file, 'w') as f:
+                json.dump({}, f)
+        
+        # واجهة المستخدم
+        self.setup_ui()
+    
+    def setup_ui(self):
+        """تهيئة واجهة المستخدم"""
         self.style = ttk.Style()
         self.style.configure('TLabel', font=('Arial', 10))
-        self.style.configure('TButton', font=('Arial', 10), background='#4CAF50')
-        self.style.configure('TEntry', font=('Arial', 10))
+        self.style.configure('TButton', font=('Arial', 10), background='#FF5555')
         
-        # Header
-        header = ttk.Label(root, text="RobloxVenom - Player Information", 
-                         font=('Arial', 12, 'bold'), foreground='#333')
+        # إطار العنوان
+        header = ttk.Label(self.root, 
+                          text="RobloxVenom OFFLINE MODE",
+                          font=('Arial', 14, 'bold'),
+                          foreground='#333')
         header.pack(pady=10)
         
-        # Username input
-        self.username_label = ttk.Label(root, text="Enter Roblox Username:")
-        self.username_label.pack()
+        # إطار الإدخال
+        input_frame = ttk.Frame(self.root)
+        input_frame.pack(pady=10)
         
-        self.username_entry = ttk.Entry(root, width=30)
-        self.username_entry.pack(pady=5)
+        ttk.Label(input_frame, text="Username:").pack(side=tk.LEFT)
+        self.username_entry = ttk.Entry(input_frame, width=25)
+        self.username_entry.pack(side=tk.LEFT, padx=5)
         
-        # Search button
-        self.search_button = ttk.Button(root, text="Search", 
-                                     command=self.fetch_player_info)
-        self.search_button.pack(pady=10)
+        ttk.Button(input_frame, 
+                  text="Search", 
+                  command=self.search_player).pack(side=tk.LEFT)
         
-        # Results frame
-        self.results_frame = ttk.LabelFrame(root, text="Player Information")
-        self.results_frame.pack(padx=10, pady=10, fill="both", expand=True)
+        # إطار النتائج
+        self.results_frame = ttk.LabelFrame(self.root, 
+                                          text="Player Info",
+                                          padding=10)
+        self.results_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # Result labels
+        # حقول النتائج
         self.result_labels = {
             'Username': ttk.Label(self.results_frame, text="Username: "),
             'UserID': ttk.Label(self.results_frame, text="User ID: "),
             'JoinDate': ttk.Label(self.results_frame, text="Join Date: "),
-            'ProfileLink': ttk.Label(self.results_frame, text="Profile: "),
-            'DisplayName': ttk.Label(self.results_frame, text="Display Name: ")
+            'LastSeen': ttk.Label(self.results_frame, text="Last Seen: ")
         }
         
         for label in self.result_labels.values():
-            label.pack(anchor="w", padx=5, pady=2)
+            label.pack(anchor=tk.W)
     
-    def check_internet(self):
-        """Check internet connection"""
-        try:
-            socket.create_connection(("8.8.8.8", 53), timeout=3)
-            return True
-        except OSError:
-            return False
-    
-    def fetch_player_info(self):
+    def search_player(self):
+        """بحث عن لاعب في البيانات المحلية"""
         username = self.username_entry.get().strip()
         if not username:
             messagebox.showerror("Error", "Please enter a username")
             return
         
-        if not self.check_internet():
-            messagebox.showerror("Error", "No internet connection!")
-            return
-        
         try:
-            # Request settings
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "application/json"
-            }
+            with open(self.data_file, 'r') as f:
+                players = json.load(f)
             
-            # Step 1: Get User ID
-            user_id_url = f"https://api.roblox.com/users/get-by-username?username={username}"
-            response = requests.get(user_id_url, headers=headers, 
-                                 verify=False, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'Id' not in data:
-                    messagebox.showerror("Error", "User not found")
-                    return
-                
-                user_id = data['Id']
-                
-                # Step 2: Get detailed info
-                user_info_url = f"https://users.roblox.com/v1/users/{user_id}"
-                user_response = requests.get(user_info_url, headers=headers,
-                                          verify=False, timeout=10)
-                
-                if user_response.status_code == 200:
-                    user_data = user_response.json()
-                    
-                    # Format join date
-                    join_date = datetime.strptime(user_data['created'][:10], 
-                                               "%Y-%m-%d").strftime("%B %d, %Y")
-                    
-                    # Update UI
-                    self.result_labels['Username'].config(
-                        text=f"Username: {user_data['name']}")
-                    self.result_labels['UserID'].config(
-                        text=f"User ID: {user_id}")
-                    self.result_labels['JoinDate'].config(
-                        text=f"Join Date: {join_date}")
-                    self.result_labels['ProfileLink'].config(
-                        text=f"Profile: https://www.roblox.com/users/{user_id}/profile")
-                    self.result_labels['DisplayName'].config(
-                        text=f"Display Name: {user_data.get('displayName', 'N/A')}")
-                    
-                else:
-                    messagebox.showerror("Error", 
-                                       f"API Error: {user_response.status_code}")
+            if username in players:
+                self.show_player_info(players[username])
             else:
-                messagebox.showerror("Error", 
-                                   f"User lookup failed: {response.status_code}")
-                
-        except requests.exceptions.Timeout:
-            messagebox.showerror("Error", "Request timed out (10s)")
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Error", f"Network error: {str(e)}")
+                messagebox.showinfo("Not Found", 
+                                  f"Player '{username}' not in local database.\n\n"
+                                  "You can add them manually.")
         except Exception as e:
-            messagebox.showerror("Error", f"Unexpected error: {str(e)}")
+            messagebox.showerror("Error", f"Failed to load data: {str(e)}")
+    
+    def show_player_info(self, player_data):
+        """عرض معلومات اللاعب"""
+        self.result_labels['Username'].config(text=f"Username: {player_data.get('username', 'N/A')}")
+        self.result_labels['UserID'].config(text=f"User ID: {player_data.get('user_id', 'N/A')}")
+        self.result_labels['JoinDate'].config(text=f"Join Date: {player_data.get('join_date', 'N/A')}")
+        self.result_labels['LastSeen'].config(text=f"Last Seen: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = RobloxVenomApp(root)
+    app = RobloxVenomOffline(root)
     root.mainloop()
